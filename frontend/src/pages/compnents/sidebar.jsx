@@ -27,6 +27,7 @@ export default function Sidebar({ onClose }) {
 
       <nav className="flex-1 overflow-y-auto space-y-1 py-2">
         <MenuTitle title="Finance" />
+        <MenuItem to="/finance-dashboard" icon={ShoppingBag} label="Finance Dashboard" onClick={onClose} />
         <MenuItem to="/finance-create" icon={ShoppingBag} label="Update Finance Details" onClick={onClose} />
         
         <MenuTitle title="Users" />

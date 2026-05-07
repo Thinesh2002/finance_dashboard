@@ -1,15 +1,16 @@
 import { useEffect, useState } from "react";
-import { Chart } from "react-google-charts";
 import { motion, AnimatePresence } from "framer-motion";
 import API from "../../config/api";
 import {
-  ArrowDownRight,
   ArrowUpRight,
-  DollarSign,
-  Wallet,
-  Receipt,
+  ArrowDownRight,
+  Calendar,
+  Layers,
+  Activity,
   Filter,
-  CalendarDays,
+  Wallet,
+  CalendarRange,
+  History,
 } from "lucide-react";
 
 export default function FinanceDashboard() {
@@ -17,9 +18,10 @@ export default function FinanceDashboard() {
   const [filteredData, setFilteredData] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Filters State - Default to Current Month and Year
   const [filterMonth, setFilterMonth] = useState(new Date().getMonth() + 1);
   const [filterYear, setFilterYear] = useState(new Date().getFullYear());
+  const [filterCategory, setFilterCategory] = useState("All");
+  const [filterType, setFilterType] = useState("All");
 
   const months = [
     { name: "January", value: 1 }, { name: "February", value: 2 },
@@ -30,226 +32,237 @@ export default function FinanceDashboard() {
     { name: "November", value: 11 }, { name: "December", value: 12 },
   ];
 
-  const years = Array.from({ length: 5 }, (_, i) => 2025 + i);
+  const years = Array.from({ length: 5 }, (_, i) => 2024 + i);
 
-  const fetchDashboard = async () => {
+  const fetchData = async () => {
     try {
       setLoading(true);
       const res = await API.get("/transactions/all");
       setTransactions(res.data.data);
     } catch (error) {
-      console.log(error);
+      console.error(error);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchDashboard();
+    fetchData();
   }, []);
 
   useEffect(() => {
     const filtered = transactions.filter((t) => {
       const tDate = new Date(t.date);
-      return (
-        tDate.getMonth() + 1 === Number(filterMonth) &&
-        tDate.getFullYear() === Number(filterYear)
-      );
+      const matchesDate = tDate.getMonth() + 1 === Number(filterMonth) && tDate.getFullYear() === Number(filterYear);
+      const matchesCategory = filterCategory === "All" || t.category === filterCategory;
+      const matchesType = filterType === "All" || t.type === filterType;
+      return matchesDate && matchesCategory && matchesType;
     });
     setFilteredData(filtered);
-  }, [transactions, filterMonth, filterYear]);
+  }, [transactions, filterMonth, filterYear, filterCategory, filterType]);
 
-  // Calculations for Filtered Data
-  const totalIncome = filteredData
-    .filter((t) => t.type === "income")
-    .reduce((acc, curr) => acc + Number(curr.amount), 0);
-
-  const totalExpense = filteredData
-    .filter((t) => t.type === "expense")
-    .reduce((acc, curr) => acc + Number(curr.amount), 0);
-
-  const netProfit = totalIncome - totalExpense;
-
-  // Chart Data
-  const chartData = [
-    ["Type", "Amount"],
-    ["Income", totalIncome],
-    ["Expense", totalExpense],
-  ];
-
-  const chartOptions = {
-    pieHole: 0.4,
-    backgroundColor: "transparent",
-    colors: ["#10b981", "#f43f5e"],
-    legend: { textStyle: { color: "#9ca3af", fontSize: 12 } },
-    chartArea: { width: "90%", height: "90%" },
-    pieSliceBorderColor: "transparent",
+  const calculateStats = (data) => {
+    const income = data.filter(t => t.type === "income").reduce((acc, t) => acc + Number(t.amount), 0);
+    const expense = data.filter(t => t.type === "expense").reduce((acc, t) => acc + Number(t.amount), 0);
+    return { income, expense, net: income - expense };
   };
 
-  const cardVariants = {
-    initial: { opacity: 0, y: 20 },
-    animate: { opacity: 1, y: 0 },
+  const currentMonthStats = calculateStats(filteredData);
+
+  const lastMonthDate = new Date();
+  lastMonthDate.setMonth(lastMonthDate.getMonth() - 1);
+  const lastMonthStats = calculateStats(transactions.filter(t => {
+    const d = new Date(t.date);
+    return d.getMonth() === lastMonthDate.getMonth() && d.getFullYear() === lastMonthDate.getFullYear();
+  }));
+
+  const threeMonthsAgo = new Date();
+  threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+  const last3MonthsStats = calculateStats(transactions.filter(t => new Date(t.date) >= threeMonthsAgo));
+
+  const lifeTimeStats = calculateStats(transactions);
+
+  const getMonthlySummary = () => {
+    const summary = {};
+    transactions.forEach((t) => {
+      const date = new Date(t.date);
+      const key = `${date.getFullYear()}-${date.getMonth() + 1}`;
+      if (!summary[key]) {
+        summary[key] = { year: date.getFullYear(), month: date.getMonth() + 1, income: 0, expense: 0 };
+      }
+      if (t.type === "income") summary[key].income += Number(t.amount);
+      else summary[key].expense += Number(t.amount);
+    });
+    return Object.values(summary).sort((a, b) => a.year !== b.year ? b.year - a.year : a.month - b.month);
   };
+
+  const categories = ["All", ...new Set(transactions.map((t) => t.category))];
+
+  const StatCard = ({ title, income, expense, net, icon: Icon, color }) => (
+    <motion.div 
+      initial={{ opacity: 0, y: 15 }} 
+      animate={{ opacity: 1, y: 0 }}
+      className="bg-[#0d121f] border border-zinc-800/50 rounded-3xl p-5 flex flex-col justify-between shadow-xl relative overflow-hidden"
+    >
+      <div className={`absolute top-0 right-0 w-24 h-24 bg-${color}-500/5 blur-3xl -mr-10 -mt-10`} />
+      <div className="flex items-center justify-between mb-4 relative z-10">
+        <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500">{title}</span>
+        <div className={`p-2 rounded-xl bg-zinc-900 border border-zinc-800 text-${color}-400`}>
+          <Icon size={16} />
+        </div>
+      </div>
+      <div className="space-y-1 mb-4 relative z-10">
+        <p className="text-xs text-zinc-400">Net Balance</p>
+        <h3 className={`text-2xl font-black ${net >= 0 ? 'text-white' : 'text-rose-500'}`}>
+          Rs {net.toLocaleString()}
+        </h3>
+      </div>
+      <div className="grid grid-cols-2 gap-4 pt-4 border-t border-zinc-800/50 relative z-10">
+        <div>
+          <p className="text-[9px] text-zinc-500 uppercase font-bold">Income</p>
+          <p className="text-emerald-400 font-bold text-sm">+{income.toLocaleString()}</p>
+        </div>
+        <div>
+          <p className="text-[9px] text-zinc-500 uppercase font-bold">Expenses</p>
+          <p className="text-rose-400 font-bold text-sm">-{expense.toLocaleString()}</p>
+        </div>
+      </div>
+    </motion.div>
+  );
 
   return (
-    <div className="min-h-screen bg-[#050810] text-white p-4 md:p-8 font-sans">
-      {/* Header & Filter Section */}
-      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-6 mb-10">
+    <div className="bg-[#05070a] min-h-screen text-zinc-200 p-4 md:p-10 font-sans">
+      
+      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 mb-12">
         <div>
-          <h1 className="text-4xl font-extrabold bg-gradient-to-r from-white to-zinc-500 bg-clip-text text-transparent italic">
-            Finance Dashboard
-          </h1>
-          <p className="text-zinc-500 mt-2 font-medium">
-            Monitoring current month: <span className="text-emerald-400">{months.find(m => m.value === Number(filterMonth))?.name} {filterYear}</span>
-          </p>
+          <h1 className="text-3xl font-black text-white tracking-tight">Financial Overview</h1>
+          <div className="flex items-center gap-2 mt-2">
+            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            <p className="text-zinc-500 text-sm font-medium">Live data for {months.find(m => m.value === Number(filterMonth))?.name} {filterYear}</p>
+          </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-4 bg-zinc-900/50 p-2 rounded-2xl border border-zinc-800">
-          <div className="flex items-center gap-2 px-3 text-zinc-400">
-            <Filter size={18} />
-            <span className="text-xs font-bold uppercase tracking-widest">Filters</span>
+        <div className="flex flex-wrap gap-2 bg-[#0d121f] p-2 rounded-2xl border border-zinc-800">
+          <div className="flex items-center gap-2 px-3 border-r border-zinc-800">
+            <Filter size={14} className="text-zinc-500" />
           </div>
-          
-          <select 
-            value={filterMonth}
-            onChange={(e) => setFilterMonth(e.target.value)}
-            className="bg-[#0a0f1d] border border-zinc-800 rounded-xl px-4 py-2 text-sm outline-none focus:border-emerald-500 transition-all"
-          >
-            {months.map(m => <option key={m.value} value={m.value}>{m.name}</option>)}
+          <select value={filterMonth} onChange={(e) => setFilterMonth(e.target.value)} className="bg-transparent text-xs p-1 outline-none">
+            {months.map(m => <option key={m.value} value={m.value} className="bg-[#0d121f]">{m.name}</option>)}
           </select>
-
-          <select 
-            value={filterYear}
-            onChange={(e) => setFilterYear(e.target.value)}
-            className="bg-[#0a0f1d] border border-zinc-800 rounded-xl px-4 py-2 text-sm outline-none focus:border-emerald-500 transition-all"
-          >
-            {years.map(y => <option key={y} value={y}>{y}</option>)}
+          <select value={filterYear} onChange={(e) => setFilterYear(e.target.value)} className="bg-transparent text-xs p-1 outline-none">
+            {years.map(y => <option key={y} value={y} className="bg-[#0d121f]">{y}</option>)}
+          </select>
+          <select value={filterType} onChange={(e) => setFilterType(e.target.value)} className="bg-transparent text-xs p-1 outline-none">
+            <option value="All" className="bg-[#0d121f]">All Types</option>
+            <option value="income" className="bg-[#0d121f]">Income</option>
+            <option value="expense" className="bg-[#0d121f]">Expense</option>
+          </select>
+          <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} className="bg-transparent text-xs p-1 outline-none max-w-[100px]">
+            {categories.map(c => <option key={c} value={c} className="bg-[#0d121f]">{c}</option>)}
           </select>
         </div>
       </div>
 
-      {/* Analytics Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
-        {[
-          { label: "Income", val: totalIncome, color: "text-emerald-400", bg: "bg-emerald-500/10", icon: ArrowUpRight },
-          { label: "Expense", val: totalExpense, color: "text-rose-400", bg: "bg-rose-500/10", icon: ArrowDownRight },
-          { label: "Net Profit", val: netProfit, color: "text-white", bg: "bg-blue-500/10", icon: DollarSign },
-        ].map((card, idx) => (
-          <motion.div
-            key={card.label}
-            variants={cardVariants}
-            initial="initial"
-            animate="animate"
-            transition={{ delay: idx * 0.1 }}
-            className="bg-[#0d1425] border border-zinc-800 rounded-[2rem] p-6 shadow-2xl relative overflow-hidden group"
-          >
-            <div className={`absolute top-0 right-0 w-24 h-24 ${card.bg} blur-3xl rounded-full -mr-10 -mt-10 transition-transform group-hover:scale-150 duration-700`} />
-            <div className="flex items-center justify-between relative z-10">
-              <div>
-                <p className="text-zinc-500 text-xs font-bold uppercase tracking-widest">{card.label}</p>
-                <h2 className={`text-3xl font-black mt-2 ${card.color}`}>
-                  Rs {card.val.toLocaleString()}
-                </h2>
-              </div>
-              <div className={`w-14 h-14 rounded-2xl ${card.bg} flex items-center justify-center border border-white/5`}>
-                <card.icon size={28} className={card.color} />
-              </div>
-            </div>
-          </motion.div>
-        ))}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-12">
+        <StatCard title="Current Month" {...currentMonthStats} icon={Calendar} color="emerald" />
+        <StatCard title="Previous Month" {...lastMonthStats} icon={History} color="blue" />
+        <StatCard title="Last 3 Months" {...last3MonthsStats} icon={CalendarRange} color="purple" />
+        <StatCard title="Life Time" {...lifeTimeStats} icon={Wallet} color="amber" />
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
-        {/* Google Chart */}
-        <motion.div 
-          initial={{ opacity: 0, x: -20 }}
-          animate={{ opacity: 1, x: 0 }}
-          className="xl:col-span-1 bg-[#0d1425] border border-zinc-800 rounded-[2.5rem] p-8 shadow-2xl"
-        >
-          <div className="flex items-center gap-3 mb-6">
-            <CalendarDays className="text-emerald-400" />
-            <h2 className="text-xl font-bold italic">Monthly Structure</h2>
-          </div>
-          <div className="h-[300px] flex items-center justify-center">
-            {filteredData.length > 0 ? (
-              <Chart
-                chartType="PieChart"
-                data={chartData}
-                options={chartOptions}
-                width={"100%"}
-                height={"100%"}
-              />
-            ) : (
-              <p className="text-zinc-600 italic">No data to chart</p>
-            )}
-          </div>
-        </motion.div>
-
-        {/* Recent Transactions Table */}
-        <motion.div 
-          initial={{ opacity: 0, x: 20 }}
-          animate={{ opacity: 1, x: 0 }}
-          className="xl:col-span-2 bg-[#0d1425] border border-zinc-800 rounded-[2.5rem] overflow-hidden shadow-2xl"
-        >
-          <div className="p-8 border-b border-zinc-800 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Receipt className="text-emerald-400" size={24} />
-              <h2 className="text-xl font-bold italic">Recent Activity</h2>
+        <div className="xl:col-span-2 space-y-8">
+          <div className="bg-[#0d121f] border border-zinc-800/50 rounded-[2.5rem] overflow-hidden shadow-2xl">
+            <div className="px-8 py-6 border-b border-zinc-800/50 flex items-center gap-3">
+              <Layers size={20} className="text-emerald-400" />
+              <h2 className="text-lg font-bold text-white">Monthly Summary</h2>
             </div>
-            <span className="bg-zinc-800 text-zinc-400 px-3 py-1 rounded-full text-[10px] font-bold tracking-tighter uppercase">
-              {filteredData.length} records
-            </span>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-zinc-900/30">
+                    {["Year", "Month", "Income", "Expenses", "Net Profit"].map(h => (
+                      <th key={h} className="px-8 py-4 text-[10px] font-black uppercase tracking-widest text-zinc-500">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-800/50">
+                  {getMonthlySummary().map((row, i) => (
+                    <tr key={i} className="hover:bg-white/[0.02] transition-colors">
+                      <td className="px-8 py-4 text-sm font-bold text-zinc-400">{row.year}</td>
+                      <td className="px-8 py-4 text-sm font-medium text-zinc-200">{months.find(m => m.value === row.month)?.name}</td>
+                      <td className="px-8 py-4 text-sm text-emerald-400 font-bold">Rs {row.income.toLocaleString()}</td>
+                      <td className="px-8 py-4 text-sm text-rose-400 font-bold">Rs {row.expense.toLocaleString()}</td>
+                      <td className={`px-8 py-4 text-sm font-black ${(row.income - row.expense) >= 0 ? "text-emerald-400" : "text-rose-500"}`}>
+                        Rs {(row.income - row.expense).toLocaleString()}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-[#050810]/50">
-                <tr>
-                  {["Ref ID", "Type", "Category", "Amount", "Date"].map(h => (
-                    <th key={h} className="text-left px-8 py-5 text-zinc-500 text-[10px] uppercase font-black tracking-widest">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-900">
-                <AnimatePresence>
+          <div className="bg-[#0d121f] border border-zinc-800/50 rounded-[2.5rem] overflow-hidden shadow-2xl">
+            <div className="px-8 py-6 border-b border-zinc-800/50 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Activity size={20} className="text-blue-400" />
+                <h2 className="text-lg font-bold text-white">Recent Transactions</h2>
+              </div>
+              <span className="text-[10px] bg-zinc-800 px-3 py-1 rounded-full font-bold text-zinc-400">{filteredData.length} Records</span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="bg-zinc-900/30">
+                    {["Type", "Category", "Amount", "Date"].map(h => (
+                      <th key={h} className="px-8 py-4 text-[10px] font-black uppercase tracking-widest text-zinc-500">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-800/50">
                   {loading ? (
-                    <tr><td colSpan="5" className="text-center py-20 text-zinc-600 italic">Processing data...</td></tr>
+                    <tr><td colSpan="4" className="py-12 text-center text-zinc-600 italic">Processing...</td></tr>
                   ) : filteredData.length === 0 ? (
-                    <tr><td colSpan="5" className="text-center py-20 text-zinc-600 italic tracking-widest">NO RECORDS FOR THIS MONTH</td></tr>
+                    <tr><td colSpan="4" className="py-12 text-center text-zinc-600 italic">No transactions found for this period</td></tr>
                   ) : (
-                    filteredData.map((item, idx) => (
-                      <motion.tr
-                        key={item.id}
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        transition={{ delay: idx * 0.05 }}
-                        className="hover:bg-emerald-500/[0.02] transition-colors group"
-                      >
-                        <td className="px-8 py-5 font-mono text-xs text-zinc-400 group-hover:text-emerald-400 transition-colors">
-                          {item.transaction_id}
-                        </td>
-                        <td className="px-8 py-5">
-                          <span className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-tighter ${
-                            item.type === "income" ? "bg-emerald-500/10 text-emerald-400" : "bg-rose-500/10 text-rose-400"
-                          }`}>
+                    filteredData.map((item) => (
+                      <tr key={item.id} className="hover:bg-white/[0.01]">
+                        <td className="px-8 py-4">
+                          <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[9px] font-black uppercase ${item.type === 'income' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-500'}`}>
+                            {item.type === 'income' ? <ArrowUpRight size={10} /> : <ArrowDownRight size={10} />}
                             {item.type}
-                          </span>
+                          </div>
                         </td>
-                        <td className="px-8 py-5 text-sm font-medium text-zinc-300">{item.category}</td>
-                        <td className={`px-8 py-5 font-bold ${item.type === "income" ? "text-emerald-400" : "text-rose-400"}`}>
+                        <td className="px-8 py-4 text-sm font-medium text-zinc-300">{item.category}</td>
+                        <td className={`px-8 py-4 text-sm font-black ${item.type === 'income' ? 'text-emerald-400' : 'text-rose-500'}`}>
                           Rs {Number(item.amount).toLocaleString()}
                         </td>
-                        <td className="px-8 py-5 text-xs text-zinc-500 font-medium">
-                          {item.date?.split("T")[0]}
-                        </td>
-                      </motion.tr>
+                        <td className="px-8 py-4 text-xs text-zinc-500 font-medium">{item.date?.split("T")[0]}</td>
+                      </tr>
                     ))
                   )}
-                </AnimatePresence>
-              </tbody>
-            </table>
+                </tbody>
+              </table>
+            </div>
           </div>
-        </motion.div>
+        </div>
+
+        <div className="space-y-6">
+          <div className="bg-gradient-to-br from-emerald-600 to-teal-700 rounded-[2.5rem] p-8 text-white shadow-xl">
+            <h3 className="text-xl font-black mb-2">Smart Insights</h3>
+            <p className="text-emerald-100 text-sm leading-relaxed mb-6 opacity-90">
+              Your highest spending category this month is <span className="font-bold underline text-white">{filteredData.filter(t => t.type === 'expense').sort((a,b) => b.amount - a.amount)[0]?.category || 'N/A'}</span>.
+            </p>
+            <div className="bg-white/10 rounded-2xl p-4 backdrop-blur-sm border border-white/10">
+              <p className="text-[10px] uppercase font-bold opacity-70 mb-1">Savings Goal</p>
+              <div className="h-2 w-full bg-black/20 rounded-full overflow-hidden">
+                <div className="h-full bg-white rounded-full w-[65%]" />
+              </div>
+              <p className="text-right text-[10px] mt-2 font-bold">65% Achieved</p>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

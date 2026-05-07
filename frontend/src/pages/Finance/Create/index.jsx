@@ -170,7 +170,7 @@ disabled:cursor-not-allowed
                 <label className="text-xs font-black text-zinc-500 ml-3 uppercase tracking-[0.2em]">Category Label</label>
                 <input type="text" name="category" list="category-options" value={formData.category} onChange={handleChange} placeholder="e.g. Salary" required className={inputStyle} />
                 <datalist id="category-options">
-                  <option value="Daraz" /><option value="Transport" /><option value="Salary" /><option value="Food" />
+                  <option value="Daraz" /><option value="Transport" /><option value="Salary" /><option value="Product Buy" />
                 </datalist>
               </div>
 
