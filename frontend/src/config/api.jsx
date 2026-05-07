@@ -3,7 +3,7 @@ import axios from 'axios';
 
 
 const API = axios.create({
-  baseURL: 'http://finance-api.teckvora.com//api' 
+  baseURL: 'https://finance-api.teckvora.com//api' 
 });
 
 
