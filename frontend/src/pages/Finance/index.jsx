@@ -131,7 +131,7 @@ export default function FinanceDashboard() {
   );
 
   return (
-    <div className="bg-[#05070a] min-h-screen text-zinc-200 p-4 md:p-10 font-sans">
+    <div className=" text-zinc-200  font-sans">
       
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 mb-12">
         <div>
